@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nook — Micro-Connections for Campus Life</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            sand: '#FAF9F5',
+            terracotta: '#E07A5F',
+            sage: '#81B29A',
+            charcoal: '#2D3142',
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            display: ['"Fraunces"', 'Georgia', 'serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --bg: #FAF9F5;
+      --card: #FFFFFF;
+      --fg: #2D3142;
+      --primary: #E07A5F;
+      --secondary: #81B29A;
+      --muted: #6B7280;
+      --border: #EAE6DD;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      -webkit-font-smoothing: antialiased;
+    }
+    .display { font-family: 'Fraunces', Georgia, serif; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 1.25rem; }
+    .btn { transition: all .18s ease; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .toast { animation: slideIn .3s ease; }
+    @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-backdrop { backdrop-filter: blur(4px); }
+    .pulse-dot { animation: pulse 1.8s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(129,178,154,.6); } 70% { box-shadow: 0 0 0 10px rgba(129,178,154,0); } 100% { box-shadow: 0 0 0 0 rgba(129,178,154,0); } }
+    .breath { animation: breath 4s ease-in-out infinite; }
+    @keyframes breath { 0%,100% { transform: scale(1); opacity:.7; } 50% { transform: scale(1.35); opacity:1; } }
+    .drawer { transition: transform .3s ease; }
+    .drawer.closed { transform: translateX(100%); }
+    .tab-active { color: var(--primary); border-bottom: 2px solid var(--primary); }
+    .filter-chip.active { background: var(--primary); color: white; }
+    .spark-card { transition: transform .18s ease, box-shadow .18s ease; }
+    .spark-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(45,49,66,.08); }
+    .building { transition: transform .18s ease; cursor: pointer; }
+    .building:hover { transform: scale(1.04); }
+    .scrollbar::-webkit-scrollbar { height: 6px; }
+    .scrollbar::-webkit-scrollbar-thumb { background: #D9D4C8; border-radius: 3px; }
+    .no-scroll { overflow: hidden; }
+    .gradient-avatar { background: linear-gradient(135deg, #E07A5F, #81B29A); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+  // ---------------- State ----------------
+  const state = {
+    activeTab: 'find',
+    campus: 'MacEwan Hall',
+    filter: 'All',
+    sparks: [],
+    joined: [], // spark ids user pulled up chair to
+    hosted: [],
+    groundingStreak: 3,
+    pulseCount: 34,
+    toast: null,
+    modals: { host: false, pullup: null, grounding: false, ux: false },
+    campusPanel: null,
+    breathing: false,
+    breathTimer: null,
+    breathLeft: 60,
+    mood: 5,
+    groundingResult: null,
+  };
+
+  const campuses = ['MacEwan Hall', 'TFDL Library 2nd Floor', 'Science Theatres Commons', 'Engineering Block A', 'Kinesiology Complex'];
+  const intents = [
+    { key: 'All', label: 'All', emoji: '' },
+    { key: 'lunch', label: 'Quick Lunch', emoji: '☕' },
+    { key: 'study', label: 'Silent Pomodoro Study', emoji: '📚' },
+    { key: 'chat', label: 'Casual Chat', emoji: '💬' },
+    { key: 'game', label: 'Quick Boardgame/Break', emoji: '♟️' },
+  ];
+  const intentEmoji = { lunch: '☕', study: '📚', chat: '💬', game: '♟️' };
+  const intentLabel = { lunch: 'Quick Lunch', study: 'Silent Pomodoro Study', chat: 'Casual Chat', game: 'Quick Boardgame/Break' };
+  const vibes = ['Body Doubling / Low Talking', 'Coffee & Venting', 'Zero-Pressure', 'Focus Buddies', 'Casual & Warm'];
+  const names = ['Maya','Jordan','Priya','Liam','Sofia','Noah','Ava','Ethan','Zara','Kai','Luna','Mateo','Chloe','Oliver','Nina'];
+  const locations = ['TFDL 3rd Floor - Table 14','MacEwan Hall Food Court - Booth 6','Science Theatres Commons - Bench 3','Engineering Block A - Study Pod 2','Kinesiology Complex - Lounge'];
+
+  function avatarColor(name){ const colors=['#E07A5F','#81B29A','#D4A373','#7B9EA8','#B5838D']; let h=0; for(let c of name) h+=c.charCodeAt(0); return colors[h%colors.length]; }
+  function initials(name){ return name.slice(0,2).toUpperCase(); }
+
+  // seed sparks
+  function seed() {
+    const data = [
+      { host:'Maya', location:'TFDL 3rd Floor - Table 14', intent:'study', duration:35, seats:2, vibe:'Body Doubling / Low Talking', icebreaker:'Ask me about my weekend trip', desc:'Working on Discrete Math' },
+      { host:'Jordan', location:'MacEwan Hall Food Court - Booth 6', intent:'lunch', duration:20, seats:1, vibe:'Coffee & Venting', icebreaker:'What is your hardest midterm?', desc:'Grabbing a quick bite between classes' },
+      { host:'Priya', location:'Science Theatres Commons - Bench 3', intent:'chat', duration:45, seats:3, vibe:'Zero-Pressure', icebreaker:'Favourite campus coffee spot?', desc:'Just need a friendly face' },
+      { host:'Liam', location:'Engineering Block A - Study Pod 2', intent:'study', duration:50, seats:2, vibe:'Focus Buddies', icebreaker:'Share one study hack', desc:'Prepping for CS midterm' },
+      { host:'Sofia', location:'Kinesiology Complex - Lounge', intent:'game', duration:30, seats:2, vibe:'Casual & Warm', icebreaker:'Best board game ever?', desc:'Quick chess break' },
+      { host:'Noah', location:'TFDL 2nd Floor - Quiet Zone', intent:'study', duration:25, seats:1, vibe:'Body Doubling / Low Talking', icebreaker:'What are you reading?', desc:'Silent reading sprint' },
+    ];
+    state.sparks = data.map((d,i)=>({
+      id: 's'+(i+1),
+      host: d.host,
+      avatar: d.host,
+      location: d.location,
+      tableId: d.location.split(' - ')[1] || 'Table',
+      intent: d.intent,
+      duration: d.duration,
+      seats: d.seats,
+      seatsOpen: d.seats,
+      vibe: d.vibe,
+      icebreaker: d.icebreaker,
+      desc: d.desc,
+      createdAt: Date.now() - Math.random()*1000*60*10,
+      expiresAt: Date.now() + d.duration*60*1000,
+    }));
+  }
+  seed();
+
+  // ---------------- Helpers ----------------
+  function $(sel){ return document.querySelector(sel); }
+  function el(tag, cls='', html=''){ const e=document.createElement(tag); if(cls) e.className=cls; if(html) e.innerHTML=html; return e; }
+  function timeLeft(sp){ const ms = sp.expiresAt - Date.now(); const m = Math.max(0, Math.ceil(ms/60000)); return m; }
+  function refreshIcons(){ if(window.lucide) lucide.createIcons(); }
+  function showToast(msg, type='info'){ state.toast={msg,type}; render(); setTimeout(()=>{ state.toast=null; render(); }, 3200); }
+
+  // ---------------- Render root ----------------
+  function render(){
+    const app = document.getElementById('app');
+    app.innerHTML = `
+      ${renderHeader()}
+      <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        ${renderTabs()}
+        <div class="mt-6">${renderActive()}</div>
+      </main>
+      ${renderModals()}
+      ${renderToastContainer()}
+      ${renderUXDrawer()}
+    `;
+    attachEvents();
+    refreshIcons();
+    startTimers();
+  }
+
+  function renderHeader(){
+    return `
+    <header class="sticky top-0 z-40 bg-sand/90 backdrop-blur border-b border-[#EAE6DD]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col gap-3">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-terracotta flex items-center justify-center text-white display text-xl font-bold">N</div>
+            <div>
+              <div class="display text-2xl font-bold leading-none">Nook</div>
+              <div class="text-xs text-muted mt-0.5">Serendipity on Campus</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 flex-wrap">
+            <div class="flex items-center gap-2 bg-white border border-[#EAE6DD] rounded-full px-3 py-1.5 text-sm">
+              <i data-lucide="map-pin" class="w-4 h-4 text-terracotta"></i>
+              <select id="campusSel" class="bg-transparent outline-none text-charcoal font-medium text-sm">
+                ${campuses.map(c=>`<option ${c===state.campus?'selected':''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            <div class="flex items-center gap-2 bg-sage/15 border border-sage/40 rounded-full px-3 py-1.5 text-sm">
+              <span class="w-2.5 h-2.5 rounded-full bg-sage pulse-dot"></span>
+              <span class="font-semibold text-charcoal"><span id="pulseNum">${state.pulseCount}</span> students open to connect right now</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>`;
+  }
+
+  function renderTabs(){
+    const tabs = [
+      {id:'find', label:'Find a Nook', icon:'search'},
+      {id:'host', label:'Host a Table', icon:'plus-circle'},
+      {id:'vibes', label:'Campus Vibes', icon:'map'},
+      {id:'sparks', label:'My Sparks', icon:'sparkles'},
+      {id:'ground', label:'Daily Grounding', icon:'heart'},
+    ];
+    return `
+    <nav class="flex gap-1 overflow-x-auto scrollbar border-b border-[#EAE6DD]">
+      ${tabs.map(t=>`
+        <button data-tab="${t.id}" class="tab-btn flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap transition ${state.activeTab===t.id?'tab-active':'text-muted hover:text-charcoal'}">
+          <i data-lucide="${t.icon}" class="w-4 h-4"></i>${t.label}
+        </button>`).join('')}
+    </nav>`;
+  }
+
+  function renderActive(){
+    switch(state.activeTab){
+      case 'find': return renderFind();
+      case 'host': return renderHostPage();
+      case 'vibes': return renderVibes();
+      case 'sparks': return renderSparks();
+      case 'ground': return renderGround();
+    }
+  }
+
+  // ---------------- Find ----------------
+  function renderFind(){
+    const filtered = state.sparks.filter(s=>{
+      if(state.filter==='All') return true;
+      const key = state.filter.toLowerCase();
+      // map filter label to intent key
+      return s.intent === filterToIntent(state.filter);
+    });
+    return `
+    <section>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+        <div>
+          <h2 class="display text-3xl font-bold">Open Tables & Study Sparks</h2>
+          <p class="text-muted text-sm mt-1">Low-pressure micro-connections happening near you.</p>
+        </div>
+        <div class="flex gap-2 overflow-x-auto scrollbar pb-1">
+          ${intents.map(it=>`
+            <button data-filter="${it.key}" class="filter-chip px-3 py-1.5 rounded-full text-sm font-semibold border border-[#EAE6DD] bg-white whitespace-nowrap transition ${state.filter===it.key?'active border-terracotta':''}">
+              ${it.emoji?it.emoji+' ':''}${it.label}
+            </button>`).join('')}
+        </div>
+      </div>
+      ${filtered.length===0?`<div class="card p-10 text-center text-muted">No open tables right now. Be the first to host one!</div>`:`
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        ${filtered.map(renderSparkCard).join('')}
+      </div>`}
+    </section>`;
+  }
+
+  function filterToIntent(f){
+    // f is intent key like 'lunch' or 'All'
+    if(f==='All') return null;
+    return f;
+  }
+  // fix filter: state.filter stores intent key ('All' or 'lunch' etc). intents keys are 'All','lunch'... good.
+
+  function renderSparkCard(s){
+    const left = timeLeft(s);
+    const joined = state.joined.includes(s.id);
+    return `
+    <div class="spark-card card p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm" style="background:${avatarColor(s.host)}">${initials(s.host)}</div>
+          <div>
+            <div class="font-semibold">${s.host}</div>
+            <div class="text-xs text-muted flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i>${s.location}</div>
+          </div>
+        </div>
+        <span class="text-xs font-bold px-2 py-1 rounded-full bg-sand text-charcoal">${intentEmoji[s.intent]} ${intentLabel[s.intent]}</span>
+      </div>
+      <div class="text-sm font-medium">${s.desc} — <span class="text-muted">${s.seatsOpen} empty seat${s.seatsOpen!==1?'s':''}, ${left} mins left</span></div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs px-2 py-1 rounded-full bg-sage/15 text-charcoal border border-sage/30">${s.vibe}</span>
+        <span class="text-xs px-2 py-1 rounded-full bg-terracotta/10 text-terracotta border border-terracotta/20">Icebreaker: ${s.icebreaker}</span>
+      </div>
+      <button data-pullup="${s.id}" class="btn mt-1 w-full py-2.5 rounded-xl font-semibold text-sm ${joined?'bg-sage text-white':'bg-terracotta text-white'}">
+        ${joined?'✓ Chair pulled up — see My Sparks':'Pull up a Chair'}
+      </button>
+    </div>`;
+  }
+
+  // ---------------- Host page ----------------
+  function renderHostPage(){
+    return `
+    <section class="max-w-2xl mx-auto">
+      <div class="mb-6">
+        <h2 class="display text-3xl font-bold">Host an Open Seat / Table</h2>
+        <p class="text-muted text-sm mt-1">Drop a pin. Set a timer. Let serendipity find you.</p>
+      </div>
+      <div class="card p-6 space-y-5">
+        <div>
+          <label class="text-sm font-semibold block mb-2">Campus location</label>
+          <select id="hostLoc" class="w-full border border-[#EAE6DD] rounded-xl px-4 py-2.5 bg-white">
+            ${locations.map(l=>`<option>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-semibold block mb-2">Connection goal / intent</label>
+          <div class="grid grid-cols-2 gap-2">
+            ${['lunch','study','chat','game'].map(k=>`
+              <label class="flex items-center gap-2 border border-[#EAE6DD] rounded-xl px-3 py-2.5 cursor-pointer hover:bg-sand">
+                <input type="radio" name="intent" value="${k}" ${k==='study'?'checked':''} />
+                <span class="text-sm font-medium">${intentEmoji[k]} ${intentLabel[k]}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold block mb-2">What are you working on / vibe? (short)</label>
+          <input id="hostDesc" type="text" placeholder="e.g. Working on Discrete Math" class="w-full border border-[#EAE6DD] rounded-xl px-4 py-2.5" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-semibold block mb-2">Open seats</label>
+            <input id="hostSeats" type="number" min="1" max="3" value="2" class="w-full border border-[#EAE6DD] rounded-xl px-4 py-2.5" />
+          </div>
+          <div>
+            <label class="text-sm font-semibold block mb-2">Self-expiring timer (mins)</label>
+            <select id="hostTimer" class="w-full border border-[#EAE6DD] rounded-xl px-4 py-2.5">
+              <option value="20">20 mins</option>
+              <option value="35" selected>35 mins</option>
+              <option value="45">45 mins</option>
+              <option value="60">60 mins</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold block mb-2">Vibe badge</label>
+          <select id="hostVibe" class="w-full border border-[#EAE6DD] rounded-xl px-4 py-2.5">
+            ${vibes.map(v=>`<option>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-semibold block mb-2">Icebreaker prompt</label>
+          <div class="flex gap-2">
+            <input id="hostIce" type="text" placeholder="e.g. Ask me about my weekend trip" class="flex-1 border border-[#EAE6DD] rounded-xl px-4 py-2.5" />
+            <button id="genIce" class="btn px-4 py-2.5 rounded-xl bg-sage/20 text-charcoal font-semibold text-sm">Generate</button>
+          </div>
+        </div>
+        <button id="hostSubmit" class="btn w-full py-3 rounded-xl bg-terracotta text-white font-bold">Drop Pin & Go Live</button>
+      </div>
+    </section>`;
+  }
+
+  // ---------------- Campus Vibes ----------------
+  const buildings = [
+    { name:'TFDL Library', vibe:'Quiet Focus', color:'#81B29A', desc:'Sunlit 3rd floor corners, low hum, perfect for deep work.', tips:'Try the east window seats.' },
+    { name:'MacEwan Hall', vibe:'Lively & Social', color:'#E07A5F', desc:'Food court energy, great for casual chats over lunch.', tips:'Booths near the windows.' },
+    { name:'Science Theatres', vibe:'Hidden Sunlit Corner', color:'#D4A373', desc:'Quiet benches with afternoon light, underused.', tips:'South wing atrium.' },
+    { name:'Engineering Block A', vibe:'Quiet Focus', color:'#7B9EA8', desc:'Study pods with whiteboards, low traffic.', tips:'Pod 4 has the best chair.' },
+    { name:'Kinesiology Complex', vibe:'Lively & Social', color:'#B5838D', desc:'Lounge with couches, post-workout social hub.', tips:'Couches by the entrance.' },
+    { name:'Social Sciences', vibe:'Hidden Sunlit Corner', color:'#A8C5A0', desc:'Atrium with plants and soft light, rarely crowded.', tips:'2nd floor mezzanine.' },
+  ];
+  function renderVibes(){
+    return `
+    <section>
+      <div class="mb-6">
+        <h2 class="display text-3xl font-bold">Campus Place Reconnection</h2>
+        <p class="text-muted text-sm mt-1">Rediscover cozy, underutilized spaces. Click a building to feel its vibe.</p>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        ${buildings.map((b,i)=>`
+          <div data-building="${i}" class="building card p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white" style="background:${b.color}"><i data-lucide="building-2" class="w-5 h-5"></i></div>
+              <span class="text-xs font-bold px-2 py-1 rounded-full" style="background:${b.color}22;color:${b.color}">${b.vibe}</span>
+            </div>
+            <div class="font-semibold">${b.name}</div>
+            <div class="text-xs text-muted mt-1">${b.desc}</div>
+          </div>`).join('')}
+      </div>
+      ${state.campusPanel!==null?renderCampusPanel(buildings[state.campusPanel]):''}
+    </section>`;
+  }
+  function renderCampusPanel(b){
+    return `
+    <div class="mt-6 card p-6 border-2" style="border-color:${b.color}">
+      <div class="flex items-start justify-between">
+        <div>
+          <h3 class="display text-2xl font-bold">${b.name}</h3>
+          <span class="text-sm font-semibold" style="color:${b.color}">${b.vibe}</span>
+        </div>
+        <button data-closepanel class="text-muted hover:text-charcoal"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="mt-3 text-sm">${b.desc}</p>
+      <div class="mt-4 flex items-center gap-2 text-sm bg-sand rounded-xl px-4 py-3">
+        <i data-lucide="lightbulb" class="w-4 h-4 text-terracotta"></i>
+        <span><strong>Tip:</strong> ${b.tips}</span>
+      </div>
+    </div>`;
+  }
+
+  // ---------------- My Sparks ----------------
+  function renderSparks(){
+    const joinedSparks = state.sparks.filter(s=>state.joined.includes(s.id));
+    const hostedSparks = state.sparks.filter(s=>state.hosted.includes(s.id));
+    return `
+    <section>
+      <div class="mb-6">
+        <h2 class="display text-3xl font-bold">My Sparks</h2>
+        <p class="text-muted text-sm mt-1">Connections you've pulled up a chair to, and tables you've hosted.</p>
+      </div>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div>
+          <h3 class="font-bold mb-3 flex items-center gap-2"><i data-lucide="armchair" class="w-4 h-4 text-terracotta"></i> Joined (${joinedSparks.length})</h3>
+          ${joinedSparks.length===0?`<div class="card p-6 text-center text-muted text-sm">No chairs pulled up yet. Go find a nook!</div>`:joinedSparks.map(s=>`
+            <div class="card p-4 mb-3">
+              <div class="font-semibold">${s.host}'s table</div>
+              <div class="text-xs text-muted">${s.location}</div>
+              <div class="mt-2 text-sm">Icebreaker: <em>${s.icebreaker}</em></div>
+              <div class="mt-2 text-xs text-sage font-semibold">${timeLeft(s)} mins left · ${s.vibe}</div>
+            </div>`).join('')}
+        </div>
+        <div>
+          <h3 class="font-bold mb-3 flex items-center gap-2"><i data-lucide="radio" class="w-4 h-4 text-sage"></i> Hosted (${hostedSparks.length})</h3>
+          ${hostedSparks.length===0?`<div class="card p-6 text-center text-muted text-sm">You haven't hosted a table yet.</div>`:hostedSparks.map(s=>`
+            <div class="card p-4 mb-3">
+              <div class="font-semibold">${intentEmoji[s.intent]} ${intentLabel[s.intent]}</div>
+              <div class="text-xs text-muted">${s.location}</div>
+              <div class="mt-2 text-xs">Seats: ${s.seatsOpen}/${s.seats} open · ${timeLeft(s)} mins left</div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="mt-6 card p-6 bg-sage/10 border-sage/30">
+        <div class="flex items-center gap-3">
+          <i data-lucide="sparkles" class="w-6 h-6 text-sage"></i>
+          <div>
+            <div class="font-bold">Grounding Streak: ${state.groundingStreak} days</div>
+            <div class="text-sm text-muted">Keep checking in daily to grow your streak.</div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  // ---------------- Grounding ----------------
+  function renderGround(){
+    return `
+    <section class="max-w-2xl mx-auto text-center">
+      <div class="mb-6">
+        <h2 class="display text-3xl font-bold">Daily Grounding</h2>
+        <p class="text-muted text-sm mt-1">60 seconds of self-connection. Then decide: rest or reach out.</p>
+      </div>
+      <div class="card p-8">
+        <div class="w-40 h-40 mx-auto rounded-full bg-sand flex items-center justify-center mb-6">
+          <div class="w-28 h-28 rounded-full bg-terracotta/20 flex items-center justify-center">
+            <i data-lucide="wind" class="w-12 h-12 text-terracotta"></i>
+          </div>
+        </div>
+        <p class="text-sm text-muted mb-6">A short breathing pacer + mood check-in. Awards your Grounding Streak.</p>
+        <button id="startGround" class="btn px-6 py-3 rounded-xl bg-terracotta text-white font-bold">Begin 60s Grounding</button>
+        <div class="mt-6 text-sm text-muted">Current streak: <strong class="text-charcoal">${state.groundingStreak} days</strong></div>
+      </div>
+    </section>`;
+  }
+
+  // ---------------- Modals ----------------
+  function renderModals(){
+    let html = '';
+    // Pull up modal
+    if(state.modals.pullup){
+      const s = state.sparks.find(x=>x.id===state.modals.pullup);
+      html += `
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/30" id="pullupBackdrop">
+        <div class="card w-full max-w-md p-6">
+          <h3 class="display text-2xl font-bold mb-2">Pull up a Chair?</h3>
+          <p class="text-sm text-muted mb-4">You're about to join <strong>${s.host}</strong> at ${s.location}. A gentle notification will be sent — zero pressure to stay.</p>
+          <div class="bg-sand rounded-xl p-4 mb-4">
+            <div class="text-xs font-bold text-terracotta mb-1">ICEBREAKER</div>
+            <div class="text-sm">${s.icebreaker}</div>
+          </div>
+          <div class="flex gap-3">
+            <button id="cancelPullup" class="btn flex-1 py-2.5 rounded-xl border border-[#EAE6DD] font-semibold">Maybe later</button>
+            <button id="confirmPullup" class="btn flex-1 py-2.5 rounded-xl bg-terracotta text-white font-semibold">Pull up a Chair</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    // Grounding modal
+    if(state.modals.grounding){
+      html += `
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/30">
+        <div class="card w-full max-w-md p-6 text-center">
+          <h3 class="display text-2xl font-bold mb-4">Grounding</h3>
+          <div class="w-44 h-44 mx-auto rounded-full bg-sand flex items-center justify-center mb-4">
+            <div class="w-32 h-32 rounded-full bg-terracotta/30 breath flex items-center justify-center">
+              <span class="display text-3xl font-bold text-terracotta" id="breathNum">${state.breathLeft}</span>
+            </div>
+          </div>
+          <p class="text-sm text-muted mb-4" id="breathMsg">Breathe in… breathe out…</p>
+          ${state.groundingResult?`<div class="bg-sage/15 rounded-xl p-4 mb-4 text-sm">${state.groundingResult}</div>`:''}
+          ${!state.groundingResult?`
+          <div class="mb-4">
+            <label class="text-sm font-semibold block mb-2">How connected do you feel today? (1-10)</label>
+            <input id="moodSlider" type="range" min="1" max="10" value="${state.mood}" class="w-full" />
+            <div class="text-sm text-muted mt-1">Mood: <strong id="moodVal">${state.mood}</strong></div>
+          </div>`:''}
+          ${state.groundingResult?`<button id="closeGround" class="btn w-full py-2.5 rounded-xl bg-terracotta text-white font-semibold">Done</button>`:`<button id="cancelGround" class="btn w-full py-2.5 rounded-xl border border-[#EAE6DD] font-semibold">Cancel</button>`}
+        </div>
+      </div>`;
+    }
+    // Host modal? We use page. But spec says modal or form; page is fine.
+    return html;
+  }
+
+  function renderToastContainer(){
+    if(!state.toast) return '';
+    const color = state.toast.type==='success'?'bg-sage':'bg-terracotta';
+    return `<div class="fixed top-20 right-4 z-50 toast ${color} text-white px-5 py-3 rounded-xl shadow-lg text-sm font-semibold">${state.toast.msg}</div>`;
+  }
+
+  // ---------------- UX Drawer ----------------
+  function renderUXDrawer(){
+    return `
+    <button id="uxBtn" class="fixed bottom-6 right-6 z-40 btn bg-charcoal text-white px-4 py-3 rounded-full shadow-lg text-sm font-semibold flex items-center gap-2">
+      <i data-lucide="book-open" class="w-4 h-4"></i> View UX Research & Design Process
+    </button>
+    <div id="uxDrawer" class="drawer closed fixed top-0 right-0 h-full w-full sm:w-[480px] bg-white shadow-2xl z-50 overflow-y-auto">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="display text-2xl font-bold">UX Research & Design Process</h3>
+          <button id="uxClose" class="text-muted hover:text-charcoal"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        <div class="space-y-5 text-sm">
+          <div class="card p-4">
+            <div class="text-xs font-bold text-terracotta mb-1">PERSONA</div>
+            <p><strong>Alex, 2nd-year transfer student</strong> eating lunch alone while scrolling phone. Wants connection but fears rejection and awkwardness.</p>
+          </div>
+          <div class="card p-4">
+            <div class="text-xs font-bold text-terracotta mb-1">SURVEY INSIGHT</div>
+            <p><strong>74% of students</strong> want to talk to peers in common areas but don't know who is approachable.</p>
+          </div>
+          <div class="card p-4">
+            <div class="text-xs font-bold text-terracotta mb-1">PROBLEM</div>
+            <p>Social friction, fear of rejection, and academic burnout leave students disconnected even in crowded campus spaces.</p>
+          </div>
+          <div class="card p-4">
+            <div class="text-xs font-bold text-terracotta mb-1">USER JOURNEY MAP</div>
+            <ol class="list-decimal ml-5 space-y-1">
+              <li>Student feels lonely in dining hall.</li>
+              <li>Opens Nook → sees open tables nearby.</li>
+              <li>Filters by intent (lunch/study).</li>
+              <li>Pulls up a chair → gentle ping sent.</li>
+              <li>Low-pressure chat or body doubling.</li>
+              <li>Grounding check-in builds streak.</li>
+            </ol>
+          </div>
+          <div class="card p-4">
+            <div class="text-xs font-bold text-terracotta mb-1">DESIGN DECISIONS</div>
+            <ul class="list-disc ml-5 space-y-1">
+              <li>Self-expiring timers prevent lingering awkwardness.</li>
+              <li>Vibe badges set expectations (low talking etc.).</li>
+              <li>Icebreakers remove "what do I say?" friction.</li>
+              <li>Warm sand + terracotta + sage = approachable, calm.</li>
+              <li>Zero-pressure language throughout.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ---------------- Events ----------------
+  function attachEvents(){
+    // campus
+    const cs = document.getElementById('campusSel');
+    if(cs) cs.addEventListener('change', e=>{ state.campus=e.target.value; showToast('Location set to '+state.campus); });
+    // tabs
+    document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click', e=>{
+      state.activeTab = b.dataset.tab;
+      render();
+    }));
+    // filters
+    document.querySelectorAll('.filter-chip').forEach(b=>b.addEventListener('click', e=>{
+      state.filter = b.dataset.filter;
+      render();
+    }));
+    // pull up
+    document.querySelectorAll('[data-pullup]').forEach(b=>b.addEventListener('click', e=>{
+      const id = b.dataset.pullup;
+      if(state.joined.includes(id)){ showToast('Already joined!','success'); return; }
+      state.modals.pullup = id;
+      render();
+    }));
+    // pullup modal buttons
+    const cancel = document.getElementById('cancelPullup');
+    if(cancel) cancel.addEventListener('click', ()=>{ state.modals.pullup=null; render(); });
+    const confirm = document.getElementById('confirmPullup');
+    if(confirm) confirm.addEventListener('click', ()=>{
+      const id = state.modals.pullup;
+      state.joined.push(id);
+      const s = state.sparks.find(x=>x.id===id);
+      if(s) s.seatsOpen = Math.max(0, s.seatsOpen-1);
+      state.modals.pullup=null;
+      showToast('🔔 Ping sent! '+s.host+' knows you\'re coming.', 'success');
+      render();
+    });
+    // backdrop close
+    const backdrop = document.getElementById('pullupBackdrop');
+    if(backdrop) backdrop.addEventListener('click', e=>{ if(e.target===backdrop){ state.modals.pullup=null; render(); } });
+    // host form
+    const genIce = document.getElementById('genIce');
+    if(genIce) genIce.addEventListener('click', ()=>{
+      const icebreakers = ['Ask me about my weekend trip','What is your hardest midterm?','Favourite campus coffee spot?','Share one study hack','Best board game ever?','What are you reading?'];
+      document.getElementById('hostIce').value = icebreakers[Math.floor(Math.random()*icebreakers.length)];
+    });
+    const hostSubmit = document.getElementById('hostSubmit');
+    if(hostSubmit) hostSubmit.addEventListener('click', ()=>{
+      const loc = document.getElementById('hostLoc').value;
+      const intent = document.querySelector('input[name="intent"]:checked').value;
+      const desc = document.getElementById('hostDesc').value.trim() || 'Open for connection';
+      const seats = parseInt(document.getElementById('hostSeats').value) || 2;
+      const timer = parseInt(document.getElementById('hostTimer').value) || 35;
+      const vibe = document.getElementById('hostVibe').value;
+      const ice = document.getElementById('hostIce').value.trim() || 'Say hi!';
+      const host = names[Math.floor(Math.random()*names.length)];
+      const newSpark = {
+        id: 's'+Date.now(),
+        host: host,
+        avatar: host,
+        location: loc,
+        tableId: loc.split(' - ')[1] || 'Table',
+        intent: intent,
+        duration: timer,
+        seats: seats,
+        seatsOpen: seats,
+        vibe: vibe,
+        icebreaker: ice,
+        desc: desc,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + timer*60*1000,
+      };
+      state.sparks.unshift(newSpark);
+      state.hosted.push(newSpark.id);
+      state.activeTab = 'find';
+      state.filter = 'All';
+      showToast('🎉 Your table is live! Others can pull up a chair.', 'success');
+      render();
+    });
+    // buildings
+    document.querySelectorAll('[data-building]').forEach(b=>b.addEventListener('click', e=>{
+      state.campusPanel = parseInt(b.dataset.building);
+      render();
+    }));
+    const closePanel = document.querySelector('[data-closepanel]');
+    if(closePanel) closePanel.addEventListener('click', ()=>{ state.campusPanel=null; render(); });
+    // grounding
+    const startGround = document.getElementById('startGround');
+    if(startGround) startGround.addEventListener('click', ()=>{ openGrounding(); });
+    // ux drawer
+    const uxBtn = document.getElementById('uxBtn');
+    if(uxBtn) uxBtn.addEventListener('click', ()=>{ document.getElementById('uxDrawer').classList.remove('closed'); });
+    const uxClose = document.getElementById('uxClose');
+    if(uxClose) uxClose.addEventListener('click', ()=>{ document.getElementById('uxDrawer').classList.add('closed'); });
+  }
+
+  // grounding logic
+  function openGrounding(){
+    state.modals.grounding = true;
+    state.breathLeft = 60;
+    state.groundingResult = null;
+    state.mood = 5;
+    render();
+    attachGroundingEvents();
+    startBreath();
+  }
+  function attachGroundingEvents(){
+    const slider = document.getElementById('moodSlider');
+    if(slider) slider.addEventListener('input', e=>{ state.mood=parseInt(e.target.value); const v=document.getElementById('moodVal'); if(v) v.textContent=state.mood; });
+    const cancel = document.getElementById('cancelGround');
+    if(cancel) cancel.addEventListener('click', ()=>{ stopBreath(); state.modals.grounding=false; render(); });
+    const close = document.getElementById('closeGround');
+    if(close) close.addEventListener('click', ()=>{ state.modals.grounding=false; state.groundingResult=null; render(); });
+  }
+  function startBreath(){
+    stopBreath();
+    state.breathTimer = setInterval(()=>{
+      state.breathLeft--;
+      const n = document.getElementById('breathNum');
+      if(n) n.textContent = state.breathLeft;
+      if(state.breathLeft<=0){
+        stopBreath();
+        finishGrounding();
+      }
+    }, 1000);
+  }
+  function stopBreath(){ if(state.breathTimer){ clearInterval(state.breathTimer); state.breathTimer=null; } }
+  function finishGrounding(){
+    state.groundingStreak += 1;
+    let msg = '';
+    if(state.mood <= 4){
+      msg = 'You feel a bit disconnected today. Consider a gentle study companion — a low-talking body-doubling nook could help.';
+    } else if(state.mood <= 7){
+      msg = 'Steady. A short walk or a casual chat nook might lift your energy.';
+    } else {
+      msg = 'You feel connected! Great day to host a table and share the warmth.';
+    }
+    state.groundingResult = msg + ' 🌿 Grounding streak +1!';
+    render();
+    attachGroundingEvents();
+    showToast('Grounding complete! Streak: '+state.groundingStreak, 'success');
+  }
+
+  // timers for pulse + expiry
+  let timersStarted = false;
+  function startTimers(){
+    if(timersStarted) return;
+    timersStarted = true;
+    setInterval(()=>{
+      // update pulse slightly
+      if(Math.random()<0.3){
+        state.pulseCount += (Math.random()<0.5?1:-1);
+        if(state.pulseCount<20) state.pulseCount=20;
+        const pn = document.getElementById('pulseNum');
+        if(pn) pn.textContent = state.pulseCount;
+      }
+      // remove expired sparks
+      const before = state.sparks.length;
+      state.sparks = state.sparks.filter(s=>s.expiresAt>Date.now());
+      if(state.sparks.length!==before && state.activeTab==='find'){
+        render();
+      }
+    }, 5000);
+  }
+
+  // initial render
+  render();
+  </script>
+</body>
+</html>
